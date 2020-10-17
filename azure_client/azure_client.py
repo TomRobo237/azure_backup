@@ -1,12 +1,20 @@
+'''set of functions to connect to azure and handle interactions to make scripting easier'''
 import hashlib
+from datetime import datetime
 
 from azure.storage.blob import BlobServiceClient, ContainerClient, StandardBlobTier
 
+DATE_FORMAT = '%Y-%m-%d %X - '
+
 def connect_service(url: str, creds: str) -> BlobServiceClient:
+    '''Connect to the main service, maybe write new ways to connect later'''
     return BlobServiceClient(account_url=url, credential=creds)
 
 def connect_container(service: BlobServiceClient, container: str) -> ContainerClient:
-    # Parse options for container name to upload, compare to list to see if container needs to be created
+    '''
+    Parse options for container name to upload,
+    compare to list to see if container needs to be created
+    '''
     container_list = [x for x in service.list_containers()]
     container_names = [x['name'] for x in container_list]
 
@@ -17,11 +25,14 @@ def connect_container(service: BlobServiceClient, container: str) -> ContainerCl
         if operation['error_code'] is not None:
             raise Exception(operation['error_code'])
         else:
-            print(f"{operation['date']}: Created container {container}, request_id: {operation['request_id']}.")
+            print(f"{operation['date'].strftime(DATE_FORMAT)}"
+                  f"Created container {container}, request_id: {operation['request_id']}."
+                 )
 
     return container_client
 
-def get_blob_manifest(container_client: ContainerClient) -> (list): # Returns list of filenames.
+def get_blob_manifest(container_client: ContainerClient) -> (list):
+    '''Returns list of filenames.'''
     return [y['name'] for y in [x for x in container_client.list_blobs()]]
 
 def upload_blob(container_client: ContainerClient,
@@ -30,6 +41,11 @@ def upload_blob(container_client: ContainerClient,
                 update=False,
                 overwrite=False
                ) -> dict:
+    '''
+    Upload a file as a blob to the cloud, there is checking to see if the md5sum matches if its
+    already uploaded, by tagging the md5 in the metadata.
+    '''
+    timestamp = datetime.utcnow().strftime(DATE_FORMAT)
     file_md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
 
     blob_client = container_client.get_blob_client(filename)
@@ -41,25 +57,34 @@ def upload_blob(container_client: ContainerClient,
         except KeyError:
             blob_md5 = ''
 
-        print(f"{filename} already in container. cloud md5: {blob_md5}, local md5: {file_md5}")
+        print(f"{timestamp} {filename} already in container. cloud md5: {blob_md5}, "
+              f"local md5: {file_md5}"
+             )
         if file_md5 != blob_md5:
-            print(f'MD5sum Mismatch: Sending local copy of {filename}')
+            print(f'{timestamp} MD5sum Mismatch - Sending local copy of {filename}')
             if overwrite:
                 blob_client.delete_blob()
-                blob_client.upload_blob(
+                operation = blob_client.upload_blob(
                     open(filename, 'rb').read(),
                     standard_blob_tier=tier,
                     metadata={'md5': file_md5}
                 )
             else:
-                print(f'Set not to overwrite. Will not send {filename}')
-
+                print(f'{timestamp} Set not to overwrite. Will not send {filename}')
+                return {'operation': 'no-op'}
+        else:
+            print(f'{timestamp} MD5Sums Match - no-op')
+            return {'operation': 'no-op'}
     else:
-        print(f'{filename} not found in container, sending local file.')
-        blob_client.upload_blob(
+        print(f'{timestamp} {filename} not found in container, sending local file.')
+        operation = blob_client.upload_blob(
             open(filename, 'rb').read(),
             standard_blob_tier=tier,
             metadata={'md5': file_md5}
         )
+    print(f"{operation['date'].strftime(DATE_FORMAT)} Uploaded: {filename}, "
+          f"request_id: {operation['request_id']}"
+         )
+    return operation
 
 # TODO: Catch errors from service.
