@@ -37,6 +37,7 @@ def get_blob_manifest(container_client: ContainerClient) -> (list):
 
 def upload_blob(container_client: ContainerClient,
                 filename: str,
+                azure_filename: str,
                 tier: StandardBlobTier,
                 update=False,
                 overwrite=False
@@ -48,7 +49,7 @@ def upload_blob(container_client: ContainerClient,
     timestamp = datetime.utcnow().strftime(DATE_FORMAT)
     file_md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
 
-    blob_client = container_client.get_blob_client(filename)
+    blob_client = container_client.get_blob_client(azure_filename)
 
     if update:
         blob_properties = blob_client.get_blob_properties()
@@ -57,8 +58,8 @@ def upload_blob(container_client: ContainerClient,
         except KeyError:
             blob_md5 = ''
 
-        print(f"{timestamp} {filename} already in container. cloud md5: {blob_md5}, "
-              f"local md5: {file_md5}"
+        print(f"{timestamp} Already in container. {azure_filename} cloud md5: {blob_md5}, "
+              f"{filename} local md5: {file_md5}"
              )
         if file_md5 != blob_md5:
             print(f'{timestamp} MD5sum Mismatch - Sending local copy of {filename}')

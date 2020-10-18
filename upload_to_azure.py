@@ -27,12 +27,12 @@ if ARGS.filename in BLOB_FILENAMES:
     azure_client.upload_blob(
         CONTAINER,
         ARGS.filename,
+        ARGS.filename,
         StandardBlobTier(ARGS.tier),
         update=True,
         overwrite=ARGS.overwrite
     )
 else:
-    azure_client.upload_blob(CONTAINER, ARGS.filename, StandardBlobTier(ARGS.tier))
+    azure_client.upload_blob(CONTAINER, ARGS.filename, ARGS.filename, StandardBlobTier(ARGS.tier))
 
-# TODO: Catch errors from service.
-# TODO: Create folder uploader. Probably in a different script.
+# TODO: this may not work with absoulte filepaths correctly!
