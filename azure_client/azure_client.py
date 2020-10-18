@@ -5,6 +5,8 @@ from datetime import datetime
 from azure.storage.blob import BlobServiceClient, ContainerClient, StandardBlobTier
 
 DATE_FORMAT = '%Y-%m-%d %X - '
+def timestamp():
+    return datetime.utcnow().strftime(DATE_FORMAT)
 
 def connect_service(url: str, creds: str) -> BlobServiceClient:
     '''Connect to the main service, maybe write new ways to connect later'''
@@ -46,8 +48,8 @@ def upload_blob(container_client: ContainerClient,
     Upload a file as a blob to the cloud, there is checking to see if the md5sum matches if its
     already uploaded, by tagging the md5 in the metadata.
     '''
-    timestamp = datetime.utcnow().strftime(DATE_FORMAT)
     file_md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
+    log = []
 
     blob_client = container_client.get_blob_client(azure_filename)
 
@@ -58,11 +60,11 @@ def upload_blob(container_client: ContainerClient,
         except KeyError:
             blob_md5 = ''
 
-        print(f"{timestamp} Already in container. {azure_filename} cloud md5: {blob_md5}, "
+        log.append(f"{timestamp()} Already in container. {azure_filename} cloud md5: {blob_md5}, " +
               f"{filename} local md5: {file_md5}"
              )
         if file_md5 != blob_md5:
-            print(f'{timestamp} MD5sum Mismatch - Sending local copy of {filename}')
+            log.append(f'{timestamp()} MD5sum Mismatch - Sending local copy of {filename}')
             if overwrite:
                 blob_client.delete_blob()
                 operation = blob_client.upload_blob(
@@ -71,21 +73,21 @@ def upload_blob(container_client: ContainerClient,
                     metadata={'md5': file_md5}
                 )
             else:
-                print(f'{timestamp} Set not to overwrite. Will not send {filename}')
-                return {'operation': 'no-op'}
+                log.append(f'{timestamp()} Set not to overwrite. Will not send {filename}')
+                operation = {'operation': 'no-op'}
         else:
-            print(f'{timestamp} MD5Sums Match - no-op')
-            return {'operation': 'no-op'}
+            log.append(f'{timestamp()} MD5Sums Match - no-op')
+            operation = {'operation': 'no-op'}
     else:
-        print(f'{timestamp} {filename} not found in container, sending local file.')
+        log.append(f'{timestamp()} {filename} not found in container, sending local file.')
         operation = blob_client.upload_blob(
             open(filename, 'rb').read(),
             standard_blob_tier=tier,
             metadata={'md5': file_md5}
         )
-    print(f"{operation['date'].strftime(DATE_FORMAT)} Uploaded: {filename}, "
+        log.append(f"{operation['date'].strftime(DATE_FORMAT)} Uploaded: {filename}, " +
           f"request_id: {operation['request_id']}"
-         )
-    return operation
+        )
+    return operation, log
 
 # TODO: Catch errors from service.

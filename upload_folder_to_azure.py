@@ -54,7 +54,7 @@ else:
 if ARGS.workers <= 1:
     for filename, azure_filename in zip(file_list, azure_filename_list):
         if azure_filename in BLOB_FILENAMES:
-            azure_client.upload_blob(
+            op, log = azure_client.upload_blob(
                 CONTAINER,
                 filename,
                 azure_filename,
@@ -63,12 +63,13 @@ if ARGS.workers <= 1:
                 overwrite=ARGS.overwrite
             )
         else:
-            azure_client.upload_blob(
+            op, log = azure_client.upload_blob(
                 CONTAINER,
                 filename,
                 azure_filename,
                 StandardBlobTier(ARGS.tier)
             )
+        print('\n'.join(log))
 elif ARGS.workers > 1:
     q = queue.Queue()
 
@@ -76,7 +77,6 @@ elif ARGS.workers > 1:
         while True:
             files = q.get()
             filename, azure_filename = files
-            print(f'Working on item: {azure_filename}')
             if azure_filename in BLOB_FILENAMES:
                 args = [
                     CONTAINER,
@@ -88,19 +88,15 @@ elif ARGS.workers > 1:
                 ]
             else:
                 args = [CONTAINER, filename, azure_filename, StandardBlobTier(ARGS.tier)]
-            azure_client.upload_blob(*args)
-            print(f'Finished: {azure_filename}')
+            op, log = azure_client.upload_blob(*args)
+            print('\n'.join(log))
             q.task_done()
 
     for i in range(ARGS.workers - 1):
         threading.Thread(target=worker, daemon=True).start()
-        print("Active threads: " + str(threading.activeCount()))
 
     for filename, azure_filename in zip(file_list, azure_filename_list):
         files = (filename, azure_filename)
         q.put(files)
-        print(f'Placed {filename} in queue')
 
-    print('All task requests sent.')
     q.join()
-    print('All work completed')
