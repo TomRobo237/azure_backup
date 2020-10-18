@@ -22,6 +22,7 @@ PARSER.add_argument('--overwrite', '-o', action='store_true')
 PARSER.add_argument('--tier', '-t', default='Archive')
 PARSER.add_argument('--strip-base-folder', '-s', action='store_true')
 PARSER.add_argument('--workers', '-w', default=0, type=int)
+PARSER.add_argument('--debug', '-d', action='store_true')
 ARGS = PARSER.parse_args()
 
 SERVICE = azure_client.connect_service(AZURE_URL, AZURE_KEY)
@@ -60,7 +61,8 @@ if ARGS.workers <= 1:
                 azure_filename,
                 StandardBlobTier(ARGS.tier),
                 update=True,
-                overwrite=ARGS.overwrite
+                overwrite=ARGS.overwrite,
+                debug=ARGS.debug
             )
         else:
             op, log = azure_client.upload_blob(
@@ -68,6 +70,7 @@ if ARGS.workers <= 1:
                 filename,
                 azure_filename,
                 StandardBlobTier(ARGS.tier)
+                debug=ARGS.debug
             )
         print('\n'.join(log))
 elif ARGS.workers > 1:
@@ -84,11 +87,14 @@ elif ARGS.workers > 1:
                     azure_filename,
                     StandardBlobTier(ARGS.tier),
                     True,
-                    ARGS.overwrite
+                    ARGS.overwrite,
+                    ARGS.debug
                 ]
+                kwargs = {}
             else:
                 args = [CONTAINER, filename, azure_filename, StandardBlobTier(ARGS.tier)]
-            op, log = azure_client.upload_blob(*args)
+                kwargs = {'debug': ARGS.debug}
+            op, log = azure_client.upload_blob(*args, **kwargs)
             print('\n'.join(log))
             q.task_done()
 
