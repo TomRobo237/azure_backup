@@ -69,7 +69,7 @@ if ARGS.workers <= 1:
                 CONTAINER,
                 filename,
                 azure_filename,
-                StandardBlobTier(ARGS.tier)
+                StandardBlobTier(ARGS.tier),
                 debug=ARGS.debug
             )
         print('\n'.join(log))
