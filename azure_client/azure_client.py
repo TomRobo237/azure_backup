@@ -1,6 +1,7 @@
 '''set of functions to connect to azure and handle interactions to make scripting easier'''
 import hashlib
 from datetime import datetime
+from time import sleep
 
 from azure.storage.blob import BlobServiceClient, ContainerClient, StandardBlobTier
 
@@ -42,7 +43,8 @@ def upload_blob(container_client: ContainerClient,
                 azure_filename: str,
                 tier: StandardBlobTier,
                 update=False,
-                overwrite=False
+                overwrite=False,
+                retries=0
                ) -> dict:
     '''
     Upload a file as a blob to the cloud, there is checking to see if the md5sum matches if its
@@ -66,12 +68,19 @@ def upload_blob(container_client: ContainerClient,
         if file_md5 != blob_md5:
             log.append(f'{timestamp()} MD5sum Mismatch - Sending local copy of {filename}')
             if overwrite:
-                blob_client.delete_blob()
-                operation = blob_client.upload_blob(
-                    open(filename, 'rb').read(),
-                    standard_blob_tier=tier,
-                    metadata={'md5': file_md5}
-                )
+                try:
+                    blob_client.delete_blob()
+                    operation = blob_client.upload_blob(
+                        open(filename, 'rb').read(),
+                        standard_blob_tier=tier,
+                        metadata={'md5': file_md5}
+                    )
+                except Exception as e: # Should be more specific... but.
+                    print(f"{timestamp()} EXCEPTION!!! {e}")
+                    if retries < 1:
+                        kwargs['retries'] = kwargs['retries'] + 1
+                        sleep(2)
+                        upload_blob(*args, **kwargs)
             else:
                 log.append(f'{timestamp()} Set not to overwrite. Will not send {filename}')
                 operation = {'operation': 'no-op'}
@@ -80,14 +89,19 @@ def upload_blob(container_client: ContainerClient,
             operation = {'operation': 'no-op'}
     else:
         log.append(f'{timestamp()} {filename} not found in container, sending local file.')
-        operation = blob_client.upload_blob(
-            open(filename, 'rb').read(),
-            standard_blob_tier=tier,
-            metadata={'md5': file_md5}
-        )
-        log.append(f"{operation['date'].strftime(DATE_FORMAT)} Uploaded: {filename}, " +
-          f"request_id: {operation['request_id']}"
-        )
+        try:
+            operation = blob_client.upload_blob(
+                open(filename, 'rb').read(),
+                standard_blob_tier=tier,
+                metadata={'md5': file_md5}
+            )
+            log.append(f"{operation['date'].strftime(DATE_FORMAT)} Uploaded: {filename}, " +
+              f"request_id: {operation['request_id']}"
+            )
+        except Exception as e: # Should be more specific... but.
+            print(f"{timestamp()} EXCEPTION!!! {e}")
+            if retries < 1:
+                kwargs['retries'] = kwargs['retries'] + 1
+                sleep(2)
+                upload_blob(*args, **kwargs)
     return operation, log
-
-# TODO: Catch errors from service.
