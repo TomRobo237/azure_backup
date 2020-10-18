@@ -4,6 +4,8 @@ import argparse
 from glob import glob, iglob
 import os
 import pathlib
+import threading
+import queue
 
 from azure.storage.blob import StandardBlobTier
 from dotenv import load_dotenv, find_dotenv
@@ -19,6 +21,7 @@ PARSER.add_argument('--folder', '-f', required=True )
 PARSER.add_argument('--overwrite', '-o', action='store_true')
 PARSER.add_argument('--tier', '-t', default='Archive')
 PARSER.add_argument('--strip-base-folder', '-s', action='store_true')
+PARSER.add_argument('--workers', '-w', default=0, type=int)
 ARGS = PARSER.parse_args()
 
 SERVICE = azure_client.connect_service(AZURE_URL, AZURE_KEY)
@@ -46,32 +49,58 @@ else:
     else:
         azure_filename_list = [ x.split(str(BASE_ABS_FOLDER) + os.sep)[-1] for x in file_list]
 
-for filename, azure_filename in zip(file_list, azure_filename_list):
-    if azure_filename in BLOB_FILENAMES:
-        azure_client.upload_blob(
-            CONTAINER,
-            filename,
-            azure_filename,
-            StandardBlobTier(ARGS.tier),
-            update=True,
-            overwrite=ARGS.overwrite
-        )
-    else:
-        azure_client.upload_blob(
-            CONTAINER,
-            filename,
-            azure_filename,
-            StandardBlobTier(ARGS.tier)
-        )
-# if ARGS.filename in BLOB_FILENAMES:
-#     azure_client.upload_blob(
-#         CONTAINER,
-#         ARGS.filename,
-#         StandardBlobTier(ARGS.tier),
-#         update=True,
-#         overwrite=ARGS.overwrite
-#     )
-# else:
-#     azure_client.upload_blob(CONTAINER, ARGS.filename, StandardBlobTier(ARGS.tier))
-# 
-# TODO: Make it async.
+
+# Actually doing the upload
+if ARGS.workers <= 1:
+    for filename, azure_filename in zip(file_list, azure_filename_list):
+        if azure_filename in BLOB_FILENAMES:
+            azure_client.upload_blob(
+                CONTAINER,
+                filename,
+                azure_filename,
+                StandardBlobTier(ARGS.tier),
+                update=True,
+                overwrite=ARGS.overwrite
+            )
+        else:
+            azure_client.upload_blob(
+                CONTAINER,
+                filename,
+                azure_filename,
+                StandardBlobTier(ARGS.tier)
+            )
+elif ARGS.workers > 1:
+    q = queue.Queue()
+
+    def worker():
+        while True:
+            files = q.get()
+            filename, azure_filename = files
+            print(f'Working on item: {azure_filename}')
+            if azure_filename in BLOB_FILENAMES:
+                args = [
+                    CONTAINER,
+                    filename,
+                    azure_filename,
+                    StandardBlobTier(ARGS.tier),
+                    True,
+                    ARGS.overwrite
+                ]
+            else:
+                args = [CONTAINER, filename, azure_filename, StandardBlobTier(ARGS.tier)]
+            azure_client.upload_blob(*args)
+            print(f'Finished: {azure_filename}')
+            q.task_done()
+
+    for i in range(ARGS.workers - 1):
+        threading.Thread(target=worker, daemon=True).start()
+        print("Active threads: " + str(threading.activeCount()))
+
+    for filename, azure_filename in zip(file_list, azure_filename_list):
+        files = (filename, azure_filename)
+        q.put(files)
+        print(f'Placed {filename} in queue')
+
+    print('All task requests sent.')
+    q.join()
+    print('All work completed')
