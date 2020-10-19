@@ -13,6 +13,14 @@ def timestamp():
 def print_debug(message):
     print(message, file=stderr)
 
+def get_md5sum(filename: str) -> str:
+    with open(filename, 'rb') as fp:
+        file_hash = hashlib.md5()
+        while chunk := fp.read(8192):
+            file_hash.update(chunk)
+    print(f'Calculated md5 {file_hash.hexdigest()}')
+    return file_hash.hexdigest()
+
 def connect_service(url: str, creds: str) -> BlobServiceClient:
     '''Connect to the main service, maybe write new ways to connect later'''
     return BlobServiceClient(account_url=url, credential=creds)
@@ -55,7 +63,7 @@ def upload_blob(container_client: ContainerClient,
     Upload a file as a blob to the cloud, there is checking to see if the md5sum matches if its
     already uploaded, by tagging the md5 in the metadata.
     '''
-    file_md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
+    file_md5 = get_md5sum(filename)
     log = []
 
     blob_client = container_client.get_blob_client(azure_filename)
