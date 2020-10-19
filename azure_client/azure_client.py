@@ -86,11 +86,12 @@ def upload_blob(container_client: ContainerClient,
             if overwrite:
                 try:
                     blob_client.delete_blob()
-                    operation = blob_client.upload_blob(
-                        open(filename, 'rb').read(),
-                        standard_blob_tier=tier,
-                        metadata={'md5': file_md5}
-                    )
+                    with open(filename, 'rb') as data:
+                        operation = blob_client.upload_blob(
+                            data,
+                            standard_blob_tier=tier,
+                            metadata={'md5': file_md5}
+                        )
                 except Exception as e: # Should be more specific... but.
                     print(f"{timestamp()} EXCEPTION!!! {e}")
                     if retries < 1:
@@ -112,11 +113,12 @@ def upload_blob(container_client: ContainerClient,
         if debug:
             print_debug(log[-1])
         try:
-            operation = blob_client.upload_blob(
-                open(filename, 'rb').read(),
-                standard_blob_tier=tier,
-                metadata={'md5': file_md5}
-            )
+            with open(filename, 'rb') as data:
+                operation = blob_client.upload_blob(
+                    data,
+                    standard_blob_tier=tier,
+                    metadata={'md5': file_md5}
+                )
             log.append(f"{operation['date'].strftime(DATE_FORMAT)} Uploaded: {filename}, " +
               f"request_id: {operation['request_id']}"
             )
