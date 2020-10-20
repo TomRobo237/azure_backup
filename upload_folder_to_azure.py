@@ -60,7 +60,7 @@ else:
 
 
 # Actually doing the upload
-if ARGS.workers <= 1:
+if ARGS.workers <= 1: # FIXME: make 1 thread if not set.
     for filename, azure_filename in zip(file_list, azure_filename_list):
         if azure_filename in BLOB_FILENAMES:
             azure_client.upload_blob(
@@ -104,7 +104,7 @@ elif ARGS.workers > 1:
             azure_client.upload_blob(*args, **kwargs)
             q.task_done()
 
-    for i in range(ARGS.workers - 1):
+    for i in range(ARGS.workers):
         threading.Thread(target=worker, daemon=True).start()
 
     for filename, azure_filename in zip(file_list, azure_filename_list):
