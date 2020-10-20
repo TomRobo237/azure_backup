@@ -24,7 +24,7 @@ PARSER.add_argument('--overwrite', '-o', action='store_true')
 PARSER.add_argument('--tier', '-t', default='Archive')
 PARSER.add_argument('--strip-base-folder', '-s', action='store_true')
 PARSER.add_argument('--workers', '-w', default=0, type=int)
-PARSER.add_argument('--debug', '-d', action='store_true')
+PARSER.add_argument('--debug', '-d', action='store_true') # FIXME: Actually write something to change log level.
 PARSER.add_argument('--logfile', '-l')
 ARGS = PARSER.parse_args()
 

@@ -59,6 +59,7 @@ def upload_blob(container_client: ContainerClient,
     Upload a file as a blob to the cloud, there is checking to see if the md5sum matches if its
     already uploaded, by tagging the md5 in the metadata.
     '''
+    #TODO: Make this log better, more readable, kinda a mess rn
     file_md5 = get_md5sum(filename)
     operation = {'operation': 'no-op'} # Default return
 
