@@ -3,22 +3,18 @@ import hashlib
 from datetime import datetime
 from time import sleep
 from sys import stderr
+import threading
 
 from azure.storage.blob import BlobServiceClient, ContainerClient, StandardBlobTier
 
-DATE_FORMAT = '%Y-%m-%d %X - '
-def timestamp():
-    return datetime.utcnow().strftime(DATE_FORMAT)
-
-def print_debug(message):
-    print(message, file=stderr)
+from .logger import log
 
 def get_md5sum(filename: str) -> str:
     with open(filename, 'rb') as fp:
         file_hash = hashlib.md5()
         while chunk := fp.read(8192):
             file_hash.update(chunk)
-    print(f'Calculated md5 {file_hash.hexdigest()}')
+    log.debug(f'Calculated md5 {file_hash.hexdigest()}')
     return file_hash.hexdigest()
 
 def connect_service(url: str, creds: str) -> BlobServiceClient:
@@ -64,7 +60,7 @@ def upload_blob(container_client: ContainerClient,
     already uploaded, by tagging the md5 in the metadata.
     '''
     file_md5 = get_md5sum(filename)
-    log = []
+    operation = {'operation': 'no-op'} # Default return
 
     blob_client = container_client.get_blob_client(azure_filename)
 
@@ -74,15 +70,9 @@ def upload_blob(container_client: ContainerClient,
             blob_md5 = blob_properties['metadata']['md5']
         except KeyError:
             blob_md5 = ''
-        log.append(f"{timestamp()} Already in container. {azure_filename} cloud md5: {blob_md5}, " +
-              f"{filename} local md5: {file_md5}"
-             )
-        if debug:
-            print_debug(log[-1])
-        if file_md5 != blob_md5:
-            log.append(f'{timestamp()} MD5sum Mismatch - Sending local copy of {filename}')
-            if debug:
-                print_debug(log[-1])
+        log.info(f"Already in container. {azure_filename} cloud md5: {blob_md5}, {filename} local md5: {file_md5}")
+        if file_md5 != blob_md5: # TODO: Reorder to be cleaner
+            log.info(f'MD5sum Mismatch - Sending local copy of {filename}')
             if overwrite:
                 try:
                     blob_client.delete_blob()
@@ -93,25 +83,16 @@ def upload_blob(container_client: ContainerClient,
                             metadata={'md5': file_md5}
                         )
                 except Exception as e: # Should be more specific... but.
-                    print(f"{timestamp()} EXCEPTION!!! {e}")
                     if retries < 1:
                         kwargs['retries'] = kwargs['retries'] + 1
                         sleep(2)
                         upload_blob(*args, **kwargs)
             else:
-                log.append(f'{timestamp()} Set not to overwrite. Will not send {filename}')
-                if debug:
-                    print_debug(log[-1])
-                operation = {'operation': 'no-op'}
+                log.info(f'Set not to overwrite. Will not send {filename}')
         else:
-            log.append(f'{timestamp()} MD5Sums Match - no-op')
-            if debug:
-                print_debug(log[-1])
-            operation = {'operation': 'no-op'}
+            log.info(f'MD5Sums Match - no-op')
     else:
-        log.append(f'{timestamp()} {filename} not found in container, sending local file.')
-        if debug:
-            print_debug(log[-1])
+        log.info(f'{filename} not found in container, sending local file.')
         try:
             with open(filename, 'rb') as data:
                 operation = blob_client.upload_blob(
@@ -119,17 +100,11 @@ def upload_blob(container_client: ContainerClient,
                     standard_blob_tier=tier,
                     metadata={'md5': file_md5}
                 )
-            log.append(f"{operation['date'].strftime(DATE_FORMAT)} Uploaded: {filename}, " +
-              f"request_id: {operation['request_id']}"
+            log.info(f"Uploaded: {filename}, request_id: {operation['request_id']}"
             )
-            if debug:
-                print_debug(log[-1])
         except Exception as e: # Should be more specific... but.
-            print(f"{timestamp()} EXCEPTION!!! {e}")
             if retries < 1:
                 kwargs['retries'] = kwargs['retries'] + 1
                 sleep(2)
                 upload_blob(*args, **kwargs)
-    if debug:
-        log = [f'{timestamp()} Debug log, already printed.']
-    return operation, log
+    return operation

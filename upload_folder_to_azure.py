@@ -6,11 +6,13 @@ import os
 import pathlib
 import threading
 import queue
+import logging
 
 from azure.storage.blob import StandardBlobTier
 from dotenv import load_dotenv, find_dotenv
 
 from azure_client import azure_client
+from azure_client.logger import log, formatter
 
 load_dotenv(find_dotenv())
 AZURE_URL, AZURE_KEY = os.getenv("AZURE_URL"), os.getenv("AZURE_KEY")
@@ -23,7 +25,13 @@ PARSER.add_argument('--tier', '-t', default='Archive')
 PARSER.add_argument('--strip-base-folder', '-s', action='store_true')
 PARSER.add_argument('--workers', '-w', default=0, type=int)
 PARSER.add_argument('--debug', '-d', action='store_true')
+PARSER.add_argument('--logfile', '-l')
 ARGS = PARSER.parse_args()
+
+if ARGS.logfile:
+    handler = logging.FileHandler(ARGS.logfile)
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
 
 SERVICE = azure_client.connect_service(AZURE_URL, AZURE_KEY)
 CONTAINER = azure_client.connect_container(SERVICE, ARGS.container)
@@ -55,7 +63,7 @@ else:
 if ARGS.workers <= 1:
     for filename, azure_filename in zip(file_list, azure_filename_list):
         if azure_filename in BLOB_FILENAMES:
-            op, log = azure_client.upload_blob(
+            azure_client.upload_blob(
                 CONTAINER,
                 filename,
                 azure_filename,
@@ -65,14 +73,13 @@ if ARGS.workers <= 1:
                 debug=ARGS.debug
             )
         else:
-            op, log = azure_client.upload_blob(
+            azure_client.upload_blob(
                 CONTAINER,
                 filename,
                 azure_filename,
                 StandardBlobTier(ARGS.tier),
                 debug=ARGS.debug
             )
-        print('\n'.join(log))
 elif ARGS.workers > 1:
     q = queue.Queue()
 
@@ -94,8 +101,7 @@ elif ARGS.workers > 1:
             else:
                 args = [CONTAINER, filename, azure_filename, StandardBlobTier(ARGS.tier)]
                 kwargs = {'debug': ARGS.debug}
-            op, log = azure_client.upload_blob(*args, **kwargs)
-            print('\n'.join(log))
+            azure_client.upload_blob(*args, **kwargs)
             q.task_done()
 
     for i in range(ARGS.workers - 1):
