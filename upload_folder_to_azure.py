@@ -23,8 +23,8 @@ PARSER.add_argument('--folder', '-f', required=True )
 PARSER.add_argument('--overwrite', '-o', action='store_true')
 PARSER.add_argument('--tier', '-t', default='Archive')
 PARSER.add_argument('--strip-base-folder', '-s', action='store_true')
-PARSER.add_argument('--workers', '-w', default=0, type=int)
-PARSER.add_argument('--debug', '-d', action='store_true') # FIXME: Actually write something to change log level.
+PARSER.add_argument('--workers', '-w', default=1, type=int)
+PARSER.add_argument('--debug', '-d', action='store_true') 
 PARSER.add_argument('--logfile', '-l')
 ARGS = PARSER.parse_args()
 
@@ -32,6 +32,9 @@ if ARGS.logfile:
     handler = logging.FileHandler(ARGS.logfile)
     handler.setFormatter(formatter)
     log.addHandler(handler)
+
+if ARGS.debug:
+    log.setLevel(logging.DEBUG)
 
 SERVICE = azure_client.connect_service(AZURE_URL, AZURE_KEY)
 CONTAINER = azure_client.connect_container(SERVICE, ARGS.container)
@@ -60,31 +63,11 @@ else:
 
 
 # Actually doing the upload
-if ARGS.workers <= 1: # FIXME: make 1 thread if not set.
-    for filename, azure_filename in zip(file_list, azure_filename_list):
-        if azure_filename in BLOB_FILENAMES:
-            azure_client.upload_blob(
-                CONTAINER,
-                filename,
-                azure_filename,
-                StandardBlobTier(ARGS.tier),
-                update=True,
-                overwrite=ARGS.overwrite,
-                debug=ARGS.debug
-            )
-        else:
-            azure_client.upload_blob(
-                CONTAINER,
-                filename,
-                azure_filename,
-                StandardBlobTier(ARGS.tier),
-                debug=ARGS.debug
-            )
-elif ARGS.workers > 1:
-    q = queue.Queue()
+q = queue.Queue()
 
-    def worker():
-        while True:
+def worker():
+    while True:
+        try:
             files = q.get()
             filename, azure_filename = files
             if azure_filename in BLOB_FILENAMES:
@@ -102,13 +85,15 @@ elif ARGS.workers > 1:
                 args = [CONTAINER, filename, azure_filename, StandardBlobTier(ARGS.tier)]
                 kwargs = {'debug': ARGS.debug}
             azure_client.upload_blob(*args, **kwargs)
-            q.task_done()
+        except Exception as e:
+            log.error('Exception!', exc_info=e)
+        q.task_done()
 
-    for i in range(ARGS.workers):
-        threading.Thread(target=worker, daemon=True).start()
+for _ in range(ARGS.workers):
+    threading.Thread(target=worker, daemon=True).start()
 
-    for filename, azure_filename in zip(file_list, azure_filename_list):
-        files = (filename, azure_filename)
-        q.put(files)
+for filename, azure_filename in zip(file_list, azure_filename_list):
+    files = (filename, azure_filename)
+    q.put(files)
 
-    q.join()
+q.join()

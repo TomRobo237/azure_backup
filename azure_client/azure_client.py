@@ -73,39 +73,27 @@ def upload_blob(container_client: ContainerClient,
             blob_md5 = ''
         log.info(f"Already in container. {azure_filename} cloud md5: {blob_md5}, {filename} local md5: {file_md5}")
         if file_md5 != blob_md5: # TODO: Reorder to be cleaner
-            log.info(f'MD5sum Mismatch - Sending local copy of {filename}')
             if overwrite:
-                try:
-                    blob_client.delete_blob()
-                    with open(filename, 'rb') as data:
-                        operation = blob_client.upload_blob(
-                            data,
-                            standard_blob_tier=tier,
-                            metadata={'md5': file_md5}
-                        )
-                except Exception as e: # Should be more specific... but.
-                    if retries < 1:
-                        kwargs['retries'] = kwargs['retries'] + 1
-                        sleep(2)
-                        upload_blob(*args, **kwargs)
+                log.info(f'MD5sum Mismatch - Sending local copy of {filename}')
+                blob_client.delete_blob()
+                with open(filename, 'rb') as data:
+                    operation = blob_client.upload_blob(
+                        data,
+                        standard_blob_tier=tier,
+                        metadata={'md5': file_md5}
+                    )
             else:
-                log.info(f'Set not to overwrite. Will not send {filename}')
+                log.info(f'MD5Sum Mismatch - Set not to overwrite. Will not send {filename}')
         else:
             log.info(f'MD5Sums Match - no-op')
     else:
         log.info(f'{filename} not found in container, sending local file.')
-        try:
-            with open(filename, 'rb') as data:
-                operation = blob_client.upload_blob(
-                    data,
-                    standard_blob_tier=tier,
-                    metadata={'md5': file_md5}
-                )
-            log.info(f"Uploaded: {filename}, request_id: {operation['request_id']}"
+        with open(filename, 'rb') as data:
+            operation = blob_client.upload_blob(
+                data,
+                standard_blob_tier=tier,
+                metadata={'md5': file_md5}
             )
-        except Exception as e: # Should be more specific... but.
-            if retries < 1:
-                kwargs['retries'] = kwargs['retries'] + 1
-                sleep(2)
-                upload_blob(*args, **kwargs)
+        log.info(f"Uploaded: {filename}, request_id: {operation['request_id']}"
+        )
     return operation
