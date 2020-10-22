@@ -24,7 +24,7 @@ PARSER.add_argument('--overwrite', '-o', action='store_true')
 PARSER.add_argument('--tier', '-t', default='Archive')
 PARSER.add_argument('--strip-base-folder', '-s', action='store_true')
 PARSER.add_argument('--workers', '-w', default=1, type=int)
-PARSER.add_argument('--debug', '-d', action='store_true') 
+PARSER.add_argument('--debug', '-d', action='store_true')
 PARSER.add_argument('--logfile', '-l')
 ARGS = PARSER.parse_args()
 
@@ -71,7 +71,7 @@ def worker():
             files = q.get()
             filename, azure_filename = files
             if azure_filename in BLOB_FILENAMES:
-                args = [
+                func_args = [
                     CONTAINER,
                     filename,
                     azure_filename,
@@ -80,13 +80,16 @@ def worker():
                     ARGS.overwrite,
                     ARGS.debug
                 ]
-                kwargs = {}
+                func_kwargs = {}
             else:
-                args = [CONTAINER, filename, azure_filename, StandardBlobTier(ARGS.tier)]
-                kwargs = {'debug': ARGS.debug}
-            azure_client.upload_blob(*args, **kwargs)
+                func_args = [CONTAINER, filename, azure_filename, StandardBlobTier(ARGS.tier)]
+                func_kwargs = {'debug': ARGS.debug}
+            azure_client.upload_blob(*func_args, **func_kwargs)
         except Exception as e:
+            log.error('File: %s', azure_filename)
             log.error('Exception!', exc_info=e)
+            log.error('Replacing file in queue.')
+            q.put(files)
         q.task_done()
 
 for _ in range(ARGS.workers):
