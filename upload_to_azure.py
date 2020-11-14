@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 '''Simple command line tool to upload a single file to a azure container'''
+# FIXME: I've reworked how some of this works but its all in the folder upload script.
 import argparse
 import os
 
