@@ -36,7 +36,7 @@ def connect_container(service: BlobServiceClient, container: str) -> ContainerCl
         if operation['error_code'] is not None:
             raise Exception(operation['error_code'])
         else:
-            log.info("Created container {container}, request_id: {operation['request_id']}.")
+            log.info(f"Created container {container}, request_id: {operation['request_id']}.")
 
     return container_client
 
