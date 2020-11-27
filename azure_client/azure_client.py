@@ -1,12 +1,14 @@
 '''set of functions to connect to azure and handle interactions to make scripting easier'''
-import hashlib
 from datetime import datetime
-from time import sleep
+import hashlib
+import os
+import pathlib
 from sys import stderr
 import threading
+from time import sleep
 
-from azure.storage.blob import BlobServiceClient, ContainerClient, StandardBlobTier, BlobClient, RehydratePriority
-
+from azure.storage.blob import BlobServiceClient, ContainerClient, BlobClient, BlobProperties
+from azure.storage.blob import StandardBlobTier, RehydratePriority
 from .logger import log
 
 def get_md5sum(filename: str) -> str:
@@ -110,4 +112,43 @@ def upload_blob(container_client: ContainerClient,
             )
         log.info(f"Uploaded: {filename}, request_id: {operation['request_id']}"
         )
+    return operation
+
+
+def download_blob(blob: BlobClient, blob_info: BlobProperties, destination: str, overwrite: bool, attempt=0) -> dict:
+    destination_filename = pathlib.Path(f'{destination}/{blob.blob_name}')
+    blob_md5 = blob_info['metadata']['md5']
+    operation = {'operation': 'no-op'} # Default return
+
+    if not overwrite and os.path.isfile(destination_filename):
+        log.error(f'file {destination_filename} already exists and is not set to overwrite.')
+        local_md5 = get_md5sum(destination_filename)
+        log.error(f'local md5: {local_md5}, azure md5: {blob_md5}')
+        return operation
+    elif overwrite and os.path.isfile(destination_filename):
+        local_md5 = get_md5sum(destination_filename)
+        log.info(f'file {destination_filename} already exists locally. md5: {local_md5}')
+        if local_md5 == blob_md5:
+            log.info(f'local md5sum matches azure md5sum of {local_md5}')
+            return operation
+
+    log.info(f'Downloading {blob.blob_name} to {destination}/{blob.blob_name}.')
+    log.debug('Creating path %s.', destination_filename.parent)
+    os.makedirs(destination_filename.parent, exist_ok=True)
+
+    with open(destination_filename, 'wb') as fp:
+        download_client = blob.download_blob()
+        operation = download_client.download_to_stream(fp)
+    local_md5 = get_md5sum(destination_filename)
+
+    if local_md5 == blob_md5:
+        log.info(f'downloaded local md5sum of {destination_filename} matches azure md5sum of {local_md5}')
+    else:
+        log.error(f'downloaded file {destination_filename} md5sum mismatch with cloud.')
+        if attempt >= 2:
+            log.error(f'{destination_filename} md5sum mismatch after 3 tries downloading, giving up.')
+            return operation
+        attempt =+ 1
+        operation = download_blob(blob, blob_info, destination, overwrite, attempt)
+
     return operation
