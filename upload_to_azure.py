@@ -25,7 +25,7 @@ CONTAINER = azure_client.connect_container(SERVICE, ARGS.container)
 BLOB_FILENAMES = azure_client.get_blob_manifest(CONTAINER)
 
 if ARGS.filename in BLOB_FILENAMES:
-    op, log = azure_client.upload_blob(
+    op = azure_client.upload_blob(
         CONTAINER,
         ARGS.filename,
         ARGS.filename,
@@ -34,7 +34,7 @@ if ARGS.filename in BLOB_FILENAMES:
         overwrite=ARGS.overwrite
     )
 else:
-    op, log = azure_client.upload_blob(CONTAINER, ARGS.filename, ARGS.filename, StandardBlobTier(ARGS.tier))
-print('\n'.join(log))
+    op = azure_client.upload_blob(CONTAINER, ARGS.filename, ARGS.filename, StandardBlobTier(ARGS.tier))
+print(op)
 
 # TODO: this may not work with absoulte filepaths correctly!
