@@ -5,7 +5,7 @@ from time import sleep
 from sys import stderr
 import threading
 
-from azure.storage.blob import BlobServiceClient, ContainerClient, StandardBlobTier
+from azure.storage.blob import BlobServiceClient, ContainerClient, StandardBlobTier, BlobClient, RehydratePriority
 
 from .logger import log
 
@@ -21,7 +21,7 @@ def connect_service(url: str, creds: str) -> BlobServiceClient:
     '''Connect to the main service, maybe write new ways to connect later'''
     return BlobServiceClient(account_url=url, credential=creds)
 
-def connect_container(service: BlobServiceClient, container: str) -> ContainerClient:
+def connect_container(service: BlobServiceClient, container: str, create=True) -> ContainerClient:
     '''
     Parse options for container name to upload,
     compare to list to see if container needs to be created
@@ -31,18 +31,34 @@ def connect_container(service: BlobServiceClient, container: str) -> ContainerCl
 
     container_client = service.get_container_client(container)
 
-    if container not in container_names: # Meaning no container setup yet.
+    if container not in container_names and create: # Meaning no container setup yet.
         operation = container_client.create_container()
         if operation['error_code'] is not None:
             raise Exception(operation['error_code'])
         else:
             log.info(f"Created container {container}, request_id: {operation['request_id']}.")
+    elif container not in container_names and not create:
+        log.error(f'Container {container} not found.')
+        exit(1)
+
 
     return container_client
 
 def get_blob_manifest(container_client: ContainerClient) -> (list):
     '''Returns list of filenames.'''
-    return [y['name'] for y in [x for x in container_client.list_blobs()]]
+    return [y.name for y in [x for x in container_client.list_blobs()]]
+
+def get_blob_list_information(container_client: ContainerClient) -> (list):
+    '''Returns list of tuples with information about blobs..'''
+    return [(y.name, y.blob_tier, y.size) for y in [x for x in container_client.list_blobs()]]
+
+def set_blob_tier(blob: BlobClient, tier: StandardBlobTier, priority: RehydratePriority) -> None:
+    '''Set/change blob tier'''
+    log.info(f'Setting blob tier for {blob.blob_name} to {tier.value} with priority {priority.value}')
+    blob.set_standard_blob_tier(tier, rehydrate_priority=priority)
+    INFO = blob.get_blob_properties()
+    log.info(f'blob {blob.blob_name} tier is currently {INFO.blob_tier} and archive_status is now at '
+             f'{INFO.archive_status}')
 
 def upload_blob(container_client: ContainerClient,
                 filename: str,
