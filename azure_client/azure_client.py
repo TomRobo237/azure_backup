@@ -48,6 +48,7 @@ def upload_blob(container_client: ContainerClient,
                 filename: str,
                 azure_filename: str,
                 tier: StandardBlobTier,
+                md5sums,
                 update=False,
                 overwrite=False,
                 retries=0,
@@ -58,7 +59,7 @@ def upload_blob(container_client: ContainerClient,
     already uploaded, by tagging the md5 in the metadata.
     '''
     #TODO: Make this log better, more readable, kinda a mess rn
-    file_md5 = get_md5sum(filename)
+    file_md5 = md5sums.get_md5sum(filename)
     operation = {'operation': 'no-op'} # Default return
 
     blob_client = container_client.get_blob_client(azure_filename)

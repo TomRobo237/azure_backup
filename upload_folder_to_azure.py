@@ -13,6 +13,7 @@ from dotenv import load_dotenv, find_dotenv
 
 from azure_client import azure_client
 from azure_client.logger import log, formatter
+from azure_client.md5summer import md5summer
 
 load_dotenv(find_dotenv())
 AZURE_URL, AZURE_KEY = os.getenv("AZURE_URL"), os.getenv("AZURE_KEY")
@@ -26,6 +27,7 @@ PARSER.add_argument('--strip-base-folder', '-s', action='store_true')
 PARSER.add_argument('--workers', '-w', default=1, type=int)
 PARSER.add_argument('--debug', '-d', action='store_true')
 PARSER.add_argument('--logfile', '-l')
+PARSER.add_argument('--md5sums', '-m', required=True)
 ARGS = PARSER.parse_args()
 
 if ARGS.logfile:
@@ -35,6 +37,8 @@ if ARGS.logfile:
 
 if ARGS.debug:
     log.setLevel(logging.DEBUG)
+
+MD5SUMS = md5summer(ARGS.md5sums)
 
 SERVICE = azure_client.connect_service(AZURE_URL, AZURE_KEY)
 CONTAINER = azure_client.connect_container(SERVICE, ARGS.container)
@@ -76,6 +80,7 @@ def worker():
                     filename,
                     azure_filename,
                     StandardBlobTier(ARGS.tier),
+                    MD5SUMS,
                     True,
                     ARGS.overwrite,
                     ARGS.debug
